@@ -1,0 +1,236 @@
+\title{\textbf{Understanding the Kalman Filter}\\
+      \small{A Simple, Verbose, 1D Guide}
+      }
+\author{
+        Caleb Adams \\
+                UGA Small Satellite Research Laboratory\\
+}
+% \date{\today}
+
+% https://oeis.org/wiki/List_of_LaTeX_mathematical_symbols
+
+\documentclass[11pt]{article}
+
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage[margin=1.5cm]{geometry}
+\usepackage[most]{tcolorbox}
+\usepackage{chessboard}
+\usepackage{float}
+\usepackage{hyperref}
+%\usepackage{fontspec}
+\usepackage{siunitx}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\newcommand*\circled[1]{\tikz[baseline=(char.base)]{
+            \node[shape=circle,draw,inner sep=2pt] (char) {#1};}}
+
+\storechessboardstyle{4x4}{maxfield=d4}
+\usetikzlibrary{arrows,automata}
+\graphicspath{ {./img/} }
+
+\newtcblisting{commandshell}{colback=black,colupper=white,colframe=black!75!black,
+listing only,listing options={language=sh},
+every listing line={\textcolor{green}{\small\ttfamily\bfseries Caleb Adams \$> }}}
+
+\begin{document}
+\maketitle
+
+The use of the Kalman Filter Algorithm is common in robotics as a control
+method \cite{probrobtics}. More importantly, it can be used to control spacecraft - and
+who doesn't love a good spaceship? Preferably one with an invisibility feild... but
+we won't be discussing spaceships, or invisibility feilds. For this case we will
+imagine a humble cart on a track. The cart can control its movment by applying a force.
+The cart will also have the ability to detect it's distance along the track using
+a lazer.
+
+\section{A Motion Model}
+
+It is simple to understand a linear motion model. For every time step, let's call
+the time step $\Delta t$, we move some distance, let's call the distance $\Delta x$,
+across the track. We will imagine that this track is the $x$ axis. The amount of
+distance ($\Delta x$) that the cart moves in a certain amount of time ($\Delta t$)
+is its velocity. We will say the the robots instantaneous change in position, the
+derivative that results in velocity, is represented as $\dot{x}$. If we remember the
+form definition of the derivative \cite{calculus} we see:
+
+\[
+\dot{x} = x(a) = \lim_{h\to0} \frac{f(a + h) - f(a) }{h}
+\]
+
+We can see that any movement that our cart makes along our track is given by some
+change in time multiplied by the instantaneous change in position over that time,
+so $\Delta x =  \dot{x} \Delta t$. If we recall from the great teacher Newton, we can
+write an equation of motion \cite{Principia} as follows:
+
+\[
+x = x_0 + \dot{x} \Delta t + \frac{1}{2} \ddot{x} (\Delta t)^2
+\]
+
+Here the $x_0$ value represents the starting position of the cart along the track.
+In the simplest cast, the starting position can be $0$. We can also see that the
+term $\ddot{x}$ is the acceleration term $a$. I will be helpful to again remember
+$F= ma$. We can rearrange this to see $F = ma \rightarrow F = m \ddot{x} \rightarrow \ddot{x} = \frac{F}{m}$,
+thus:
+
+\[
+x = x_0 + \dot{x} \Delta t + \frac{1}{2} \frac{F}{m} (\Delta t)^2
+\]
+
+We can then view the velocity in the same way. With the term $\dot{x}_0$ the intial
+velocity of the system:
+
+\[
+\dot{x} = \dot{x}_0 + \frac{F}{m} \Delta t
+\]
+
+Next, we want to view the system in a more compact way. To do this we see that the
+cart has a state $s$ at any given time $t$. In otherwords, at any given time
+the state of the cart can be discribed by its position and velocity. We can represent
+this state with the existing funcitons for $x$ and $\dot{x}$:
+
+\[
+s =
+\begin{bmatrix}
+  x\\
+  \dot{x}
+\end{bmatrix}
+\]
+
+And if we continue to expand this equation we get...
+
+\[
+s =
+\begin{bmatrix}
+  x\\
+  \dot{x}
+\end{bmatrix}
+=
+\begin{bmatrix}
+  x_0 + \dot{x} \Delta t + \frac{1}{2} \frac{F}{m} (\Delta t)^2\\
+  \dot{x}_0 + \frac{F}{m} \Delta t
+\end{bmatrix}
+\]
+
+Now We apply some basic linear algebra \cite{strang09}:
+
+\[
+s
+=
+\begin{bmatrix}
+  x_0 + \dot{x} \Delta t + \frac{1}{2} \frac{F}{m} (\Delta t)^2\\
+  \dot{x}_0 + \frac{F}{m} \Delta t
+\end{bmatrix}
+\rightarrow
+s
+=
+\begin{bmatrix}
+  x_0 + \dot{x} \Delta t\\
+  \dot{x}_0
+\end{bmatrix}
++
+\begin{bmatrix}
+  \frac{1}{2} \frac{F}{m} (\Delta t)^2\\
+   \frac{F}{m} \Delta t
+\end{bmatrix}
+\]
+
+\[
+\rightarrow
+s
+=
+\begin{bmatrix}
+  x_0 + \dot{x} \Delta t\\
+  \dot{x}_0
+\end{bmatrix}
++
+\begin{bmatrix}
+  \frac{1}{2m} (\Delta t)^2\\
+   \frac{1}{m} \Delta t
+\end{bmatrix}
+F
+\rightarrow
+s =
+\begin{bmatrix}
+  x_0 + \dot{x} \Delta t\\
+  \dot{x}_0
+\end{bmatrix}
++
+\begin{bmatrix}
+  \frac{(\Delta t)^2}{2m}\\
+   \frac{\Delta t}{m}
+\end{bmatrix}
+F
+\]
+
+\[
+\rightarrow
+s =
+\begin{bmatrix}
+  1 & \Delta{t}\\
+  0 & 1
+\end{bmatrix}
+\begin{bmatrix}
+  x\\
+  \dot{x}
+\end{bmatrix}
++
+\begin{bmatrix}
+  \frac{(\Delta t)^2}{2m}\\
+   \frac{\Delta t}{m}
+\end{bmatrix}
+F
+\]
+
+
+Thus,
+
+\[
+\therefore
+\hspace{10mm}
+s
+=
+\begin{bmatrix}
+  1 & \Delta t\\
+  0 & 1
+\end{bmatrix}
+\begin{bmatrix}
+  x_0\\
+  \dot{x}_0
+\end{bmatrix}
++
+\begin{bmatrix}
+  \frac{(\Delta t)^2}{2m}\\
+  \frac{\Delta t}{m}
+\end{bmatrix}
+F
+\]
+
+It is useful to think of our
+
+\bibliographystyle{IEEEtran}
+\bibliography{sources}
+
+\end{document}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+% yee
